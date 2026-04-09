@@ -5,7 +5,7 @@ import {
   ArrowRight, Search, Bell,
   MessageCircle, Rocket, Mail, CheckCircle2,
   Zap, Database, Globe, Sparkles, RefreshCw, Copy, Check,
-  Key, Eye, EyeOff, AlertTriangle,
+  AlertTriangle,
 } from 'lucide-react';
 import { generateIcebreaker, INDUSTRIES } from './utils/aiPersonalization';
 import { supabase } from './supabaseClient';
@@ -94,6 +94,7 @@ const Dashboard = () => {
   }, []);
 
   const fetchLeads = async () => {
+    if (!supabase) { setLeads(INITIAL_LEADS); return; }
     const { data, error } = await supabase
       .from('leads')
       .select('*')
@@ -101,15 +102,15 @@ const Dashboard = () => {
 
     if (error) {
       console.error('Error fetching leads:', error);
+      setLeads(INITIAL_LEADS);
     } else {
-      // Map DB field names to existing state names if they differ
       const mapped = data.map(l => ({
         ...l,
         icebreakerDraft: l.icebreaker_draft,
         icebreakerStatus: l.icebreaker_status,
         lastActivity: l.last_activity ? new Date(l.last_activity).toLocaleString() : 'N/A'
       }));
-      setLeads(mapped);
+      setLeads(mapped.length > 0 ? mapped : INITIAL_LEADS);
     }
   };
 
@@ -121,31 +122,9 @@ const Dashboard = () => {
   const [discoveryError, setDiscoveryError] = useState(null);
 
   // AI Drafts state
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('synreach_api_key') || '');
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [showKeyForm, setShowKeyForm] = useState(false);
-  const [showKeyValue, setShowKeyValue] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
 
-  // ── API Key ──────────────────────────────────────────────────────────────
-  const saveApiKey = () => {
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed) return;
-    setApiKey(trimmed);
-    localStorage.setItem('synreach_api_key', trimmed);
-    setApiKeyInput('');
-    setShowKeyForm(false);
-  };
-
-  const clearApiKey = () => {
-    setApiKey('');
-    localStorage.removeItem('synreach_api_key');
-  };
-
-  // ── Icebreaker generation ────────────────────────────────────────────────
   const generateForLead = async (leadId) => {
-    if (!apiKey) { setShowKeyForm(true); return; }
-
     // Capture current lead data at generation time
     const lead = leads.find(l => l.id === leadId);
 
@@ -154,15 +133,12 @@ const Dashboard = () => {
     ));
 
     try {
-      const draft = await generateIcebreaker(lead, apiKey);
-      
-      // Update local state
+      const draft = await generateIcebreaker(lead);
       setLeads(prev => prev.map(l =>
         l.id === leadId ? { ...l, icebreakerDraft: draft, icebreakerStatus: 'ready' } : l
       ));
 
-      // Sync to Supabase
-      await supabase
+      if (supabase) await supabase
         .from('leads')
         .update({ icebreaker_draft: draft, icebreaker_status: 'ready' })
         .eq('id', leadId);
@@ -175,7 +151,6 @@ const Dashboard = () => {
   };
 
   const generateAll = async () => {
-    if (!apiKey) { setShowKeyForm(true); return; }
     const pending = leads.filter(l => l.icebreakerStatus === 'pending' || l.icebreakerStatus === 'error');
     for (const lead of pending) {
       await generateForLead(lead.id);
@@ -192,7 +167,7 @@ const Dashboard = () => {
         : l
     ));
 
-    await supabase
+    if (supabase) await supabase
       .from('leads')
       .update({ icebreaker_status: newStatus })
       .eq('id', leadId);
@@ -211,7 +186,7 @@ const Dashboard = () => {
 
     // Map frontend fields to DB fields if needed
     const dbField = field === 'icebreakerDraft' ? 'icebreaker_draft' : field;
-    await supabase.from('leads').update({ [dbField]: value }).eq('id', leadId);
+    if (supabase) await supabase.from('leads').update({ [dbField]: value }).eq('id', leadId);
   };
 
   const copyDraft = (leadId, text) => {
@@ -257,7 +232,7 @@ const Dashboard = () => {
         });
         if (res.ok) {
           setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: 'Sent' } : l));
-          await supabase.from('leads').update({ status: 'Sent', last_activity: new Date().toISOString() }).eq('id', lead.id);
+          if (supabase) await supabase.from('leads').update({ status: 'Sent', last_activity: new Date().toISOString() }).eq('id', lead.id);
         } else {
           console.error(`Send failed for ${lead.name}: HTTP ${res.status}`);
         }
@@ -337,17 +312,23 @@ const Dashboard = () => {
       icebreaker_status: 'pending',
     }));
 
-    const { data, error } = await supabase
-      .from('leads')
-      .insert(newLeads)
-      .select();
-
-    if (error) {
-      console.error('Error adding leads:', error);
+    if (supabase) {
+      const { error } = await supabase.from('leads').insert(newLeads).select();
+      if (error) { console.error('Error adding leads:', error); return; }
+      await fetchLeads();
     } else {
-      await fetchLeads(); // Refresh leads from DB
-      setActiveTab('AI Drafts');
+      const withIds = newLeads.map((l, i) => ({
+        ...l,
+        id: Date.now() + i,
+        icebreakerDraft: null,
+        icebreakerStatus: 'pending',
+      }));
+      setLeads(prev => {
+        const existingIds = new Set(prev.map(l => l.id));
+        return [...prev, ...withIds.filter(l => !existingIds.has(l.id))];
+      });
     }
+    setActiveTab('AI Drafts');
   };
 
   const KNOWN_TABS = ['Overview', 'Discovery', 'Campaigns', 'AI Drafts'];
@@ -591,50 +572,6 @@ const Dashboard = () => {
         {activeTab === 'AI Drafts' && (
           <div className="ai-drafts-container">
 
-            {/* API Key Banner */}
-            <div className={`api-key-banner ${apiKey ? 'key-set' : 'key-missing'}`}>
-              <div className="api-key-banner-left">
-                <Key size={15} />
-                {apiKey
-                  ? <span>API key configured{showKeyValue ? ` · ${apiKey.slice(0, 8)}…` : ' · AIza••••••••'}</span>
-                  : <span>Add your Google AI Studio API key to generate icebreakers</span>}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {apiKey && (
-                  <button className="btn-icon" onClick={() => setShowKeyValue(v => !v)} title="Toggle visibility">
-                    {showKeyValue ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                )}
-                <button className="btn-icon" onClick={() => setShowKeyForm(v => !v)}>
-                  {apiKey ? 'Replace' : 'Add Key'}
-                </button>
-                {apiKey && (
-                  <button className="btn-icon btn-icon-danger" onClick={clearApiKey}>Remove</button>
-                )}
-              </div>
-            </div>
-
-            {showKeyForm && (
-              <div className="api-key-form glass-panel">
-                <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  Stored in <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '3px' }}>localStorage</code> — only sent to <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '3px' }}>api.anthropic.com</code>, never to our servers.
-                </p>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    className="api-key-input"
-                    type="password"
-                    placeholder="sk-ant-api03-…"
-                    value={apiKeyInput}
-                    onChange={e => setApiKeyInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && saveApiKey()}
-                    autoFocus
-                  />
-                  <button className="btn-primary" onClick={saveApiKey}>Save</button>
-                  <button className="btn-secondary" onClick={() => setShowKeyForm(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
-
             {/* Summary bar */}
             <div className="drafts-summary glass-panel">
               <div className="summary-stats">
@@ -770,8 +707,6 @@ const Dashboard = () => {
                         <button
                           className="btn-primary draft-action-btn"
                           onClick={() => generateForLead(lead.id)}
-                          disabled={!apiKey}
-                          title={!apiKey ? 'Add an API key first' : ''}
                         >
                           <Sparkles size={13} /> Generate
                         </button>
