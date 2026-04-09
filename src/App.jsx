@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { generateIcebreaker, INDUSTRIES } from './utils/aiPersonalization';
 import { supabase } from './supabaseClient';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 import './App.css';
 
 // ---- Components ----
@@ -88,9 +90,14 @@ const Dashboard = () => {
   const [isSending, setIsSending] = useState(false);
   const [outreachProgress, setOutreachProgress] = useState(0);
 
-  // Fetch leads on mount
+  // Messaging state
+  const [messages, setMessages] = useState([]);
+  const [selectedMessageId, setSelectedMessageId] = useState(null);
+
+  // Fetch leads and messages on mount
   useEffect(() => {
     fetchLeads();
+    fetchMessages();
   }, []);
 
   const fetchLeads = async () => {
@@ -111,6 +118,20 @@ const Dashboard = () => {
         lastActivity: l.last_activity ? new Date(l.last_activity).toLocaleString() : 'N/A'
       }));
       setLeads(mapped.length > 0 ? mapped : INITIAL_LEADS);
+    }
+  };
+
+  const fetchMessages = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*, leads(name, email)')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching messages:', error);
+    } else {
+      setMessages(data);
     }
   };
 
@@ -197,6 +218,13 @@ const Dashboard = () => {
   };
 
   // ── Derived stats ────────────────────────────────────────────────────────
+  const stats = {
+    totalLeads: leads.length,
+    sentMessages: leads.filter(l => l.status === 'Sent').length,
+    draftsReady: leads.filter(l => l.icebreakerStatus === 'ready' || l.icebreakerStatus === 'approved').length,
+    responseRate: 42.8 // Keeping this mock until we have real reply tracking
+  };
+
   const draftStats = {
     pending:    leads.filter(l => l.icebreakerStatus === 'pending').length,
     ready:      leads.filter(l => l.icebreakerStatus === 'ready').length,
@@ -219,7 +247,7 @@ const Dashboard = () => {
     for (let i = 0; i < leadsToProcess.length; i++) {
       const lead = leadsToProcess[i];
       try {
-        const res = await fetch('http://localhost:5000/api/send', {
+        const res = await fetch(`${API_BASE}/api/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -260,7 +288,7 @@ const Dashboard = () => {
     }, 200);
 
     try {
-      const res = await fetch('http://localhost:5000/api/discover', {
+      const res = await fetch(`${API_BASE}/api/discover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery }),
@@ -331,7 +359,18 @@ const Dashboard = () => {
     setActiveTab('AI Drafts');
   };
 
-  const KNOWN_TABS = ['Overview', 'Discovery', 'Campaigns', 'AI Drafts'];
+  const deleteLead = async (id) => {
+    if (!confirm('Are you sure you want to delete this lead?')) return;
+    
+    // Update local state
+    setLeads(prev => prev.filter(l => l.id !== id));
+    
+    // Update Supabase
+    const { error } = await supabase.from('leads').delete().eq('id', id);
+    if (error) console.error('Error deleting lead:', error);
+  };
+
+  const KNOWN_TABS = ['Overview', 'Discovery', 'Campaigns', 'AI Drafts', 'Leads', 'Messages'];
 
   return (
     <div className="app-layout animate-fade-in">
@@ -383,18 +422,18 @@ const Dashboard = () => {
           <div className="dashboard-grid">
             <div className="glass-panel stat-card">
               <span className="stat-label">Messages Sent</span>
-              <span className="stat-value">1,402</span>
-              <span className="trend-up">+15% this month</span>
+              <span className="stat-value">{stats.sentMessages}</span>
+              <span className="trend-up">{stats.sentMessages > 0 ? '+100% growth' : 'Starting outreach'}</span>
             </div>
             <div className="glass-panel stat-card">
-              <span className="stat-label">Response Rate</span>
-              <span className="stat-value">42.8%</span>
-              <span className="trend-up">+5.2% improvement</span>
+              <span className="stat-label">Drafts Ready</span>
+              <span className="stat-value">{stats.draftsReady}</span>
+              <span className="trend-up" style={{ color: '#fbbf24'}}>{stats.draftsReady} pending review</span>
             </div>
             <div className="glass-panel stat-card">
-              <span className="stat-label">Leads Discovered</span>
-              <span className="stat-value">842</span>
-              <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Since last week</span>
+              <span className="stat-label">Total Leads</span>
+              <span className="stat-value">{stats.totalLeads}</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Across all sources</span>
             </div>
           </div>
         )}
@@ -754,6 +793,145 @@ const Dashboard = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Leads Management ────────────────────────────────────────── */}
+        {activeTab === 'Leads' && (
+          <div className="glass-panel animate-fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h3 style={{ marginBottom: '4px' }}>Contact Database</h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Manage all prospects discovered across your campaigns.</p>
+              </div>
+              <div className="search-input-wrapper" style={{ width: '300px' }}>
+                <Search size={18} color="#94a3b8" />
+                <input 
+                  type="text" 
+                  placeholder="Search contacts..." 
+                  style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <table className="table-container">
+              <thead>
+                <tr>
+                  <th>Name & Company</th>
+                  <th>Title</th>
+                  <th>Contact Info</th>
+                  <th>Industry</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map(lead => (
+                  <tr key={lead.id}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{lead.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6366f1' }}>{lead.company}</div>
+                    </td>
+                    <td style={{ fontSize: '0.9rem' }}>{lead.title}</td>
+                    <td>
+                      <div style={{ fontSize: '0.85rem' }}>{lead.email}</div>
+                      {lead.phone && <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{lead.phone}</div>}
+                    </td>
+                    <td><span className="source-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.2)' }}>{lead.industry}</span></td>
+                    <td>
+                      <span className={`status-badge ${lead.status === 'Sent' ? 'status-active' : 'status-idle'}`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button 
+                        className="btn-icon btn-icon-danger" 
+                        onClick={() => deleteLead(lead.id)}
+                        style={{ padding: '6px' }}
+                      >
+                        <AlertTriangle size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {leads.length === 0 && (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
+                      No leads found. Start discovery to find new prospects.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Messages Inbox ─────────────────────────────────────────── */}
+        {activeTab === 'Messages' && (
+          <div className="inbox-container animate-fade-in">
+            <div className="inbox-sidebar">
+              <div className="inbox-header">
+                <h3>Recent Messages</h3>
+              </div>
+              <div className="inbox-list">
+                {messages.map(msg => (
+                  <div 
+                    key={msg.id} 
+                    className={`inbox-item ${selectedMessageId === msg.id ? 'active' : ''} ${!msg.read ? 'unread' : ''}`}
+                    onClick={() => setSelectedMessageId(msg.id)}
+                  >
+                    <div className="inbox-item-header">
+                      <span className="inbox-item-name">{msg.leads?.name || 'Unknown Contact'}</span>
+                      <span className="inbox-item-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="inbox-item-preview">{msg.content}</div>
+                    <div className="inbox-item-platform">
+                      {msg.platform === 'whatsapp' ? <MessageCircle size={10} /> : <Mail size={10} />}
+                      {msg.platform}
+                    </div>
+                  </div>
+                ))}
+                {messages.length === 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No messages yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="inbox-content">
+              {selectedMessageId ? (
+                (() => {
+                  const msg = messages.find(m => m.id === selectedMessageId);
+                  return (
+                    <div className="message-view">
+                      <div className="message-view-header">
+                        <div>
+                          <h4>{msg.leads?.name}</h4>
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{msg.leads?.email}</span>
+                        </div>
+                        <span className={`platform-tag ${msg.platform}`}>{msg.platform}</span>
+                      </div>
+                      <div className="message-bubbles">
+                        <div className={`message-bubble ${msg.direction}`}>
+                          <div className="bubble-content">{msg.content}</div>
+                          <div className="bubble-time">{new Date(msg.created_at).toLocaleString()}</div>
+                        </div>
+                      </div>
+                      <div className="message-reply-box">
+                        <textarea placeholder="Type your reply..." rows={3}></textarea>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                          <button className="btn-primary" onClick={() => alert('Reply sending feature coming soon!')}>Send Reply</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', opacity: 0.5 }}>
+                  <MessagesSquare size={64} style={{ marginBottom: '16px' }} />
+                  <p>Select a message to view the conversation</p>
+                </div>
+              )}
             </div>
           </div>
         )}
