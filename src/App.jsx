@@ -52,36 +52,7 @@ const Landing = () => (
   </div>
 );
 
-const INITIAL_LEADS = [
-  {
-    id: 1, name: 'Sarah Jenkins', email: 'sarah@techflow.io', phone: '+260971234567',
-    company: 'TechFlow', title: 'Head of People & Culture', industry: 'hr',
-    platform: 'Email', method: 'email', status: 'Draft Ready', lastActivity: '2 hours ago',
-    context: 'Recently posted about the challenges of remote onboarding and keeping culture cohesive across distributed teams',
-    icebreakerDraft: null, icebreakerStatus: 'pending', icebreakerError: null,
-  },
-  {
-    id: 2, name: 'Michael Chen', email: 'm.chen@venture.co', phone: '+260977654321',
-    company: 'Venture Co', title: 'VP of Sales', industry: 'saas',
-    platform: 'WhatsApp', method: 'whatsapp', status: 'Idle', lastActivity: '1 day ago',
-    context: 'Just closed a Series A and is aggressively scaling the sales team from 5 to 20 reps in Q2',
-    icebreakerDraft: null, icebreakerStatus: 'pending', icebreakerError: null,
-  },
-  {
-    id: 3, name: 'Elena Rostova', email: 'elena@nexus.ai', phone: '+260972223334',
-    company: 'Nexus AI', title: 'CTO', industry: 'saas',
-    platform: 'Email', method: 'email', status: 'Draft Ready', lastActivity: '5 hours ago',
-    context: 'Published a widely-shared piece on responsible AI deployment in enterprise software',
-    icebreakerDraft: null, icebreakerStatus: 'pending', icebreakerError: null,
-  },
-  {
-    id: 4, name: 'David Miller', email: 'dm@builders.com', phone: '+260979998887',
-    company: 'Builders Inc', title: 'Head of Talent Acquisition', industry: 'hr',
-    platform: 'WhatsApp', method: 'whatsapp', status: 'Draft Ready', lastActivity: '10 mins ago',
-    context: 'Hiring aggressively for 30+ engineering roles in Q2 with a very tight timeline',
-    icebreakerDraft: null, icebreakerStatus: 'pending', icebreakerError: null,
-  },
-];
+const INITIAL_LEADS = [];
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Overview');
