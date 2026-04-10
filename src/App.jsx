@@ -274,12 +274,14 @@ const Dashboard = () => {
       const discovered = raw.map((c, i) => ({
         id: Date.now() + i,
         name: c.name,
-        role: c.title,
+        role: c.title || 'Professional',
+        company: c.company || 'Unknown',
         location: c.location || 'Unknown',
-        source: c.source || 'LinkedIn',
+        source: c.source || 'Synreach AI',
         email: c.email,
         phone: c.phone,
         linkedinUrl: c.linkedinUrl,
+        context: c.context || '', // Preserve the rich context
       }));
 
       clearInterval(interval);
@@ -300,13 +302,13 @@ const Dashboard = () => {
       name: d.name,
       email: d.email || `${d.name.toLowerCase().replace(' ', '.')}@unknown.com`,
       phone: d.phone,
-      company: d.role?.split(' at ').slice(-1)[0]?.split(' - ').slice(-1)[0] || 'Unknown',
-      title: d.role?.split(' at ')[0]?.split(' - ')[0] || 'Professional',
+      company: d.company || 'Unknown',
+      title: d.role || 'Professional',
       industry: 'default',
       platform: 'Email',
       method: 'email',
       status: 'Discovered',
-      context: '',
+      context: d.context || '', // Map the context to the lead entry
       icebreaker_draft: null,
       icebreaker_status: 'pending',
     }));
@@ -481,8 +483,14 @@ const Dashboard = () => {
                       </div>
                       <div className="contact-meta">
                         <div className="meta-item"><Globe size={14} />{lead.location}</div>
-                        <div className="meta-item"><Database size={14} /> Verified Profile</div>
+                        <div className="meta-item"><Users size={14} />{lead.company}</div>
                       </div>
+                      {lead.context && (
+                        <div className="contact-context" style={{ marginTop: '12px', fontSize: '0.8rem', color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: '8px', lineHeight: '1.4' }}>
+                          <Sparkles size={12} style={{ marginRight: '6px', color: '#f59e0b', verticalAlign: 'middle' }} />
+                          {lead.context}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -920,13 +928,117 @@ const Dashboard = () => {
   );
 };
 
-const App = () => (
-  <BrowserRouter>
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-    </Routes>
-  </BrowserRouter>
-);
+// ── Authentication Component ───────────────────────────────────────────────
+const Auth = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleAuth = async (e, type) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    if (!supabase) {
+      setError('Supabase is not configured. Missing environment variables.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      if (type === 'signup') {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Check your email for the confirmation link!');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0f172a' }}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '32px' }}>
+        <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>Welcome to Synreach</h2>
+        <p style={{ textAlign: 'center', marginBottom: '24px', color: '#94a3b8', fontSize: '0.9rem' }}>Log in or sign up to access your CRM.</p>
+        
+        {error && <p style={{ color: '#ef4444', marginBottom: '16px', textAlign: 'center', fontSize: '0.875rem' }}>{error}</p>}
+        
+        <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <input 
+            type="email" 
+            placeholder="Email address" 
+            className="search-input-wrapper input" 
+            style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', outline: 'none' }} 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            required
+          />
+          <input 
+            type="password" 
+            placeholder="Password" 
+            className="search-input-wrapper input" 
+            style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', outline: 'none' }} 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            required
+          />
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <button className="btn-primary" style={{ flex: 1, padding: '10px' }} onClick={(e) => handleAuth(e, 'login')} disabled={loading}>Log in</button>
+            <button className="btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={(e) => handleAuth(e, 'signup')} disabled={loading}>Sign up</button>
+          </div>
+        </form>
+        <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.8rem', color: '#64748b' }}>
+          {!supabase ? <span style={{ color: '#f59e0b' }}>⚠️ Waiting for Supabase config</span> : 'Secured by Supabase Auth'}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ── App Root ─────────────────────────────────────────────────────────────
+const App = () => {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'white' }}>Loading...</div>;
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        {/* Enforce Authentication for the Dashboard */}
+        <Route path="/dashboard" element={session ? <Dashboard /> : <Auth />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
 
 export default App;
