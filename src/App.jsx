@@ -5,7 +5,7 @@ import {
   ArrowRight, Search, Bell,
   MessageCircle, Rocket, Mail, CheckCircle2,
   Zap, Database, Globe, Sparkles, RefreshCw, Copy, Check,
-  AlertTriangle,
+  AlertTriangle, TrendingUp
 } from 'lucide-react';
 import { generateIcebreaker, INDUSTRIES } from './utils/aiPersonalization';
 import { supabase } from './supabaseClient';
@@ -392,21 +392,69 @@ const Dashboard = () => {
 
         {/* ── Overview ──────────────────────────────────────────────────── */}
         {activeTab === 'Overview' && (
-          <div className="dashboard-grid">
-            <div className="glass-panel stat-card">
-              <span className="stat-label">Messages Sent</span>
-              <span className="stat-value">{stats.sentMessages}</span>
-              <span className="trend-up">{stats.sentMessages > 0 ? '+100% growth' : 'Starting outreach'}</span>
+          <div className="animate-fade-in">
+            <div className="dashboard-grid">
+              <div className="glass-panel stat-card">
+                <span className="stat-label">Messages Sent</span>
+                <span className="stat-value">{stats.sentMessages}</span>
+                <div className="stat-meta">
+                  <Rocket size={14} color="#34d399" />
+                  <span className="trend-up" style={{ color: '#34d399' }}>{stats.sentMessages > 0 ? 'Active Outreach' : 'Ready to start'}</span>
+                </div>
+              </div>
+              <div className="glass-panel stat-card">
+                <span className="stat-label">AI Drafts Ready</span>
+                <span className="stat-value">{stats.draftsReady}</span>
+                <div className="stat-meta">
+                  <Sparkles size={14} color="#fbbf24" />
+                  <span style={{ color: '#fbbf24', fontSize: '0.875rem' }}>{draftStats.pending} still pending</span>
+                </div>
+              </div>
+              <div className="glass-panel stat-card">
+                <span className="stat-label">Total Leads</span>
+                <span className="stat-value">{stats.totalLeads}</span>
+                <div className="stat-meta">
+                  <Users size={14} color="#6366f1" />
+                  <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Across all segments</span>
+                </div>
+              </div>
             </div>
-            <div className="glass-panel stat-card">
-              <span className="stat-label">Drafts Ready</span>
-              <span className="stat-value">{stats.draftsReady}</span>
-              <span className="trend-up" style={{ color: '#fbbf24'}}>{stats.draftsReady} pending review</span>
-            </div>
-            <div className="glass-panel stat-card">
-              <span className="stat-label">Total Leads</span>
-              <span className="stat-value">{stats.totalLeads}</span>
-              <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Across all sources</span>
+
+            <div className="overview-row" style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+              <div className="glass-panel" style={{ padding: '24px' }}>
+                <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <TrendingUp size={20} color="#4f46e5" />
+                  Performance insights
+                </h3>
+                <div style={{ height: '200px', display: 'flex', alignItems: 'flex-end', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid #1e293b' }}>
+                  {[40, 70, 45, 90, 65, 85, 100].map((h, i) => (
+                    <div key={i} style={{ flex: 1, background: 'linear-gradient(to top, #4f46e5, #818cf8)', height: `${h}%`, borderRadius: '4px 4px 0 0', opacity: 0.1 + (i * 0.15) }}></div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', color: '#94a3b8', fontSize: '0.8rem' }}>
+                  <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                </div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: '24px' }}>
+                <h3 style={{ marginBottom: '20px' }}>Recent Activity</h3>
+                <div className="activity-feed" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {leads.slice(0, 5).map((lead, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ padding: '6px', background: lead.status === 'Sent' ? '#065f4633' : '#1e293b', borderRadius: '8px' }}>
+                        {lead.status === 'Sent' ? <CheckCircle2 size={16} color="#34d399" /> : <RefreshCw size={16} color="#94a3b8" />}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{lead.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{lead.status === 'Sent' ? 'Message Delivered' : 'Lead Discovered'}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {leads.length === 0 && (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', py: 4 }}>No activity yet.</div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
