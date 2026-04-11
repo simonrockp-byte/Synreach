@@ -7,11 +7,11 @@ import {
   Zap, Database, Globe, Sparkles, RefreshCw, Copy, Check,
   AlertTriangle, TrendingUp
 } from 'lucide-react';
+import './App.css';
 import { generateIcebreaker, INDUSTRIES } from './utils/aiPersonalization';
 import { supabase } from './supabaseClient';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-import './App.css';
 
 // ---- Components ----
 
@@ -334,13 +334,13 @@ const Dashboard = () => {
 
   const deleteLead = async (id) => {
     if (!confirm('Are you sure you want to delete this lead?')) return;
-    
-    // Update local state
+
     setLeads(prev => prev.filter(l => l.id !== id));
-    
-    // Update Supabase
-    const { error } = await supabase.from('leads').delete().eq('id', id);
-    if (error) console.error('Error deleting lead:', error);
+
+    if (supabase) {
+      const { error } = await supabase.from('leads').delete().eq('id', id);
+      if (error) console.error('Error deleting lead:', error);
+    }
   };
 
   const KNOWN_TABS = ['Overview', 'Discovery', 'Campaigns', 'AI Drafts', 'Leads', 'Messages'];
@@ -518,7 +518,14 @@ const Dashboard = () => {
                       <span className="source-badge">{lead.source}</span>
                       <div className="contact-card-header">
                         <div className="contact-info">
-                          <h4>{lead.name}</h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h4>{lead.name}</h4>
+                            {lead.score && (
+                              <span className="status-badge status-active" style={{ fontSize: '0.65rem', padding: '2px 6px', background: `rgba(99, 102, 241, ${lead.score/100})`, color: 'white', borderRadius: '4px' }}>
+                                {lead.score}% Match
+                              </span>
+                            )}
+                          </div>
                           <p>{lead.role}</p>
                         </div>
                         <button
